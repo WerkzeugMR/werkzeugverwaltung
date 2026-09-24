@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="938" height="289" viewBox="0 0 938 289">
+  <title>MARCO REIß METALLBAU</title>
+  <desc>Logo with rounded grey background, purple MARCO REIS lettering and light grey METALLBAU lettering.</desc>
+
+  <!-- Background -->
+  <rect x="22" y="32" width="892" height="225" rx="48" fill="#a6a6a6"/>
+
+  <!-- Top line -->
+  <text x="469" y="154"
+        text-anchor="middle"
+        font-family="Arial Black, Impact, sans-serif"
+        font-size="139"
+        font-weight="900"
+        letter-spacing="-5"
+        fill="#a357bd"
+        stroke="#4d4d4d"
+        stroke-width="1.5"
+        paint-order="stroke">MARCO <tspan fill="#5c0b78">REIß</tspan></text>
+
+  <!-- Bottom line -->
+  <text x="469" y="266"
+        text-anchor="middle"
+        font-family="Arial Black, Impact, sans-serif"
+        font-size="106"
+        font-weight="900"
+        letter-spacing="-2"
+        fill="#d0d0d0"
+        stroke="#555555"
+        stroke-width="1.5"
+        paint-order="stroke">METALLBAU</text>
+</svg>
