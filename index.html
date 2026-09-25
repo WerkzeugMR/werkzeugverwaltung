@@ -1,0 +1,442 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#172554"><title>Werkzeugverwaltung</title>
+<link rel="manifest" href="manifest.webmanifest">
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f3f4f6;color:#111827;font-family:system-ui,Segoe UI,Arial}
+header{background:#172554;color:white;padding:14px;position:sticky;top:0;z-index:5}.bar,.wrap{max-width:1150px;margin:auto}.bar{display:flex;justify-content:space-between;align-items:center;gap:12px}.wrap{padding:16px}
+.card{background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:16px;margin-bottom:16px;box-shadow:0 2px 8px #0000000a}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.form{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}.field label{display:block;font-size:13px;color:#6b7280;margin-bottom:5px}.field input,.field select{width:100%;padding:10px;border:1px solid #d1d5db;border-radius:9px}
+button{padding:10px 14px;border:0;border-radius:9px;font-weight:700;cursor:pointer}button.primary{background:#2563eb;color:white}button.ok{background:#16a34a;color:white}button.danger{background:#dc2626;color:white}button.gray{background:#e5e7eb}.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.stat{background:#f8fafc;border:1px solid #e5e7eb;border-radius:12px;padding:14px}.stat b{display:block;font-size:27px;margin-top:5px}
+.tabs{display:flex;gap:8px;overflow:auto;margin-bottom:16px}.tabs button{white-space:nowrap}.hidden{display:none}.muted{color:#6b7280}.search{width:100%;padding:11px;border:1px solid #d1d5db;border-radius:9px;margin-bottom:12px}
+.tablewrap{overflow:auto}.table{border-collapse:collapse;width:100%;min-width:850px}.table th,.table td{padding:9px;border-bottom:1px solid #e5e7eb;text-align:left}.badge{padding:4px 8px;border-radius:999px;font-size:12px;font-weight:700}.available{background:#dcfce7;color:#166534}.borrowed{background:#fee2e2;color:#991b1b}.maintenance{background:#fef3c7;color:#92400e}
+#login{max-width:420px;margin:8vh auto}.qr{width:180px;height:180px}.notice{padding:10px;border-radius:9px;background:#eff6ff;color:#1e40af}
+@media(max-width:700px){.grid{grid-template-columns:repeat(2,1fr)}.form{grid-template-columns:1fr}.wrap{padding:10px}}
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body>
+<header><div class="bar"><b>🔧 Werkzeugverwaltung</b><span id="who"></span></div></header>
+
+<main class="wrap">
+<section id="login" class="card">
+<h2>Anmelden</h2><p class="muted">Zentrale Werkzeugverwaltung</p>
+<div class="field"><label>E-Mail</label><input id="email" type="email" autocomplete="username"></div><br>
+<div class="field"><label>Passwort</label><input id="password" type="password" autocomplete="current-password"></div>
+<div class="actions"><button class="primary" onclick="login()">Anmelden</button></div>
+<p id="loginMsg" class="muted"></p>
+</section>
+
+<section id="app" class="hidden">
+<div class="tabs">
+<button onclick="tab('dashboard')">Übersicht</button><button onclick="tab('tools')">Werkzeuge</button>
+<button class="hostOnly" onclick="tab('employees')">Mitarbeiter</button><button class="hostOnly" onclick="tab('history')">Verlauf / PDF</button><button onclick="tab('loan')">Ausgabe/Rückgabe</button><button onclick="tab('print')">QR-Druck</button>
+<button class="gray" onclick="logout()">Abmelden</button>
+</div>
+
+<section id="dashboard">
+<div class="grid"><div class="stat">Werkzeuge<b id="nTotal">0</b></div><div class="stat">Verfügbar<b id="nFree">0</b></div><div class="stat">Ausgegeben<b id="nOut">0</b></div><div class="stat">Wartung<b id="nMaint">0</b></div></div>
+<div class="card"><h2>Offene Ausgaben</h2><div id="dashLoans"></div></div>
+</section>
+
+<section id="tools" class="hidden hostOnly">
+<div class="card"><h2>Werkzeug registrieren</h2>
+<div class="form">
+<div class="field"><label>Werkzeugnummer *</label><input id="tid" placeholder="z.B. W-0001"></div>
+<div class="field"><label>Bezeichnung *</label><input id="tname"></div>
+<div class="field"><label>Kategorie</label><input id="tcat"></div>
+<div class="field"><label>Hersteller / Modell</label><input id="tmodel"></div>
+<div class="field"><label>Seriennummer</label><input id="tserial"></div>
+<div class="field"><label>Standort</label><input id="tloc"></div>
+<div class="field"><label>Status</label><select id="tstatus"><option value="available">Verfügbar</option><option value="maintenance">Wartung</option></select></div>
+</div><div class="actions"><button class="primary" onclick="saveTool()">Werkzeug speichern + QR-Code</button></div>
+<p class="muted">Die QR-Adresse wird automatisch aus der aktuellen App-Adresse erzeugt.</p></div>
+<div class="card"><input id="search" class="search" placeholder="Werkzeug suchen" oninput="renderTools()"><div class="tablewrap"><table class="table"><thead><tr><th>Nr.</th><th>Werkzeug</th><th>Standort</th><th>Status</th><th>QR</th><th></th></tr></thead><tbody id="toolRows"></tbody></table></div></div>
+</section>
+
+<section id="loan" class="hidden">
+<div class="card"><h2>Ausgabe / Rückgabe</h2><div class="form">
+<div class="field"><label>Werkzeugnummer</label><input id="lid" placeholder="W-0001"></div>
+<div class="field"><label>4-stellige Kennnummer</label><input id="lempno" inputmode="numeric" maxlength="4" placeholder="z.B. 1234"></div><div class="field"><label>Bemerkung</label><input id="lnote" placeholder="Optional"></div>
+<div class="field"><label>Auftrag / Abteilung</label><input id="ldept"></div>
+</div><div class="actions"><button class="primary" onclick="checkout()">Ausgeben</button><button class="ok" onclick="returnTool()">Rückgabe</button></div></div>
+<div class="card"><h2>Offene Ausgaben</h2><div class="tablewrap"><table class="table"><thead><tr><th>Werkzeug</th><th>Mitarbeiter</th><th>Ausgabe</th><th>Auftrag</th><th></th></tr></thead><tbody id="loanRows"></tbody></table></div></div>
+</section>
+
+
+<section id="employees" class="hidden hostOnly">
+<div class="card">
+<h2>Mitarbeiter hinzufügen</h2>
+<p class="muted">Jeder Mitarbeiter bekommt eine eigene 4-stellige Kennnummer. Die Anmeldung erfolgt gemeinsam über mitarbeiter@marcoreiss.com.</p>
+<div class="form">
+<div class="field"><label>Name *</label><input id="ename" placeholder="Vor- und Nachname"></div>
+<div class="field"><label>Kennnummer *</label><input id="eno" inputmode="numeric" maxlength="4" placeholder="z.B. 1234"></div>
+<div class="field"><label>E-Mail</label><input id="eemail" value="mitarbeiter@marcoreiss.com" readonly></div>
+</div>
+<div class="actions"><button class="primary" onclick="saveEmployee()">Mitarbeiter speichern</button></div>
+<p id="employeeMsg" class="muted"></p>
+</div>
+<div class="card">
+<h2>Mitarbeiterliste</h2>
+<div class="tablewrap">
+<table class="table">
+<thead><tr><th>Kennnummer</th><th>Name</th><th>E-Mail</th><th>Status</th><th></th></tr></thead>
+<tbody id="employeeRows"></tbody>
+</table>
+</div>
+</div>
+</section>
+
+
+<section id="history" class="hidden hostOnly">
+<div class="card">
+<h2>Verlauf der Werkzeugausgaben</h2>
+<p class="muted">Es werden die letzten 3 Monate angezeigt. Rückgaben und offene Ausgaben werden berücksichtigt.</p>
+<div class="actions">
+<button class="primary" onclick="loadHistory()">Verlauf aktualisieren</button>
+<button onclick="downloadHistoryPDF()">PDF herunterladen</button>
+</div>
+<p id="historyInfo" class="muted"></p>
+<div class="tablewrap">
+<table class="table">
+<thead><tr><th>Werkzeug</th><th>Mitarbeiter</th><th>Kennnummer</th><th>Ausgabe</th><th>Rückgabe</th><th>Bemerkung Ausgabe</th><th>Bemerkung Rückgabe</th></tr></thead>
+<tbody id="historyRows"></tbody>
+</table>
+</div>
+</div>
+</section>
+
+<section id="print" class="hidden hostOnly">
+<div class="card"><h2>QR-Codes drucken</h2><p>Jeder QR-Code öffnet beim Scannen direkt dieses Werkzeug in der App.</p><div class="actions"><button class="primary" onclick="printAll()">Alle QR-Codes drucken</button></div></div>
+<div id="qrgrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px"></div>
+</section>
+</section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+<script>
+const CONFIG={SUPABASE_URL:"https://nxcbpdhbpjqbshmdgndb.supabase.co",SUPABASE_ANON_KEY:"sb_publishable_zD-mzPs2yyajZQBvmj0QBQ_YVA83fco"};
+let sb, current=null, tools=[], loans=[], employees=[], historyLoans=[];
+const HOST_EMAIL="bauerhin.b@gmail.com";
+const EMPLOYEE_EMAIL="mitarbeiter@marcoreiss.com";
+const HOST_CODE="0606";
+const $=id=>document.getElementById(id);
+function configured(){return !CONFIG.SUPABASE_URL.startsWith("YOUR_")&&!CONFIG.SUPABASE_ANON_KEY.startsWith("YOUR_")}
+async function init(){
+ if(!configured()){ $("loginMsg").textContent="Bitte CONFIG im index.html mit deinen Supabase-Daten ausfüllen."; return; }
+ sb=supabase.createClient(CONFIG.SUPABASE_URL,CONFIG.SUPABASE_ANON_KEY);
+ const {data}=await sb.auth.getSession(); if(data.session){current=data.session.user;openApp()} 
+ const p=new URLSearchParams(location.search), q=p.get("tool"); if(q && data.session) {setTimeout(()=>openToolFromQR(q),300)}
+}
+async function login(){if(!sb)return; const {data,error}=await sb.auth.signInWithPassword({email:$("email").value,password:$("password").value}); if(error){$("loginMsg").textContent=error.message;return}current=data.user;openApp()}
+async function logout(){await sb.auth.signOut();location.href=location.pathname}
+async function openApp(){
+  $("login").classList.add("hidden");
+  $("app").classList.remove("hidden");
+  const host=current.email.toLowerCase()===HOST_EMAIL.toLowerCase();
+  $("who").textContent=host ? "Host · "+current.email : "Mitarbeiter · "+current.email;
+  document.querySelectorAll(".hostOnly").forEach(x=>x.classList.toggle("hidden",!host));
+  await loadAll();
+}
+async function loadAll(){let a=await sb.from("tools").select("*").order("tool_number");tools=a.data||[];let b=await sb.from("loans").select("*").is("returned_at",null).order("checked_out_at",{ascending:false});loans=b.data||[];
+  const c=await sb.from("employees").select("*").order("name");
+  employees=c.data||[];
+  renderAll();
+}
+function tab(id){document.querySelectorAll("#app section").forEach(x=>x.classList.add("hidden"));$(id).classList.remove("hidden");if(id==="print")renderQR();if(id==="history")loadHistory()}
+function renderAll(){renderDashboard();renderTools();renderLoans();renderEmployees();renderQR()}
+function status(t){return loans.some(l=>l.tool_id===t.id)?"borrowed":t.status}
+function statusText(s){return s==="available"?"Verfügbar":s==="borrowed"?"Ausgegeben":"In Reparatur"}
+function appUrl(id){return location.origin+location.pathname+"?tool="+encodeURIComponent(id)}
+async function saveTool(){let id=$("tid").value.trim(),name=$("tname").value.trim();if(!id||!name)return alert("Werkzeugnummer und Bezeichnung sind Pflicht.");let {error}=await sb.from("tools").insert({tool_number:id,name,category:$("tcat").value,model:$("tmodel").value,serial_number:$("tserial").value,location:$("tloc").value,status:$("tstatus").value});if(error)return alert(error.message);["tid","tname","tcat","tmodel","tserial","tloc"].forEach(x=>$(x).value="");await loadAll();alert("Werkzeug gespeichert. QR-Code ist bereit zum Drucken.");tab("print")}
+function renderTools(){let q=($("search")?.value||"").toLowerCase();$("toolRows").innerHTML=tools.filter(t=>JSON.stringify(t).toLowerCase().includes(q)).map(t=>`<tr><td><b>${esc(t.tool_number)}</b></td><td>${esc(t.name)}<br><span class="muted">${esc(t.category||"")}</span></td><td>${esc(t.location||"-")}</td><td><span class="badge ${status(t)}">${statusText(status(t))}</span></td><td><button onclick="printOne('${attr(t.tool_number)}')">QR drucken</button></td><td>
+<button onclick="toggleRepair('${attr(t.id)}')">${t.status==="maintenance"?"Freigeben":"In Reparatur"}</button>
+<button class="danger" onclick="delTool('${attr(t.id)}')">Löschen</button>
+</td></tr>`).join("")||'<tr><td colspan="6">Keine Werkzeuge.</td></tr>'}
+async function toggleRepair(id){
+  const t=tools.find(x=>x.id===id);
+  if(!t)return;
+
+  if(t.status!=="maintenance" && loans.some(l=>l.tool_id===id)){
+    return alert("Dieses Werkzeug ist aktuell ausgeliehen und kann nicht als 'In Reparatur' markiert werden.");
+  }
+
+  const newStatus=t.status==="maintenance"?"available":"maintenance";
+  const {error}=await sb.from("tools").update({status:newStatus}).eq("id",id);
+
+  if(error){
+    alert(error.message);
+    return;
+  }
+
+  await loadAll();
+  alert(newStatus==="maintenance"
+    ? "Werkzeug wurde als 'In Reparatur' markiert."
+    : "Werkzeug wurde wieder als verfügbar freigegeben.");
+}
+
+async function delTool(id){if(!confirm("Werkzeug löschen?"))return;let {error}=await sb.from("tools").delete().eq("id",id);if(error)alert(error.message);else loadAll()}
+async function checkout(){
+  const id=$("lid").value.trim();
+  const code=$("lempno").value.trim();
+  const note=$("lnote").value.trim();
+  if(!/^\d{4}$/.test(code)) return alert("Bitte eine genau 4-stellige Kennnummer eingeben.");
+
+  const t=tools.find(x=>x.tool_number===id);
+  if(!t)return alert("Werkzeug nicht gefunden.");
+  if(status(t)!=="available")return alert("Werkzeug ist nicht verfügbar.");
+
+  let {data,error}=await sb.rpc("verify_employee_code",{p_code:code});
+  let person=data?.[0] || data;
+  if(error || !person){
+    const fallback=await sb.from("employees").select("id,name,email,employee_no").eq("employee_no",code).eq("active",true).maybeSingle();
+    if(fallback.error) return alert("Kennnummer konnte nicht geprüft werden: "+fallback.error.message);
+    person=fallback.data;
+  }
+  if(!person && !(current.email.toLowerCase()===HOST_EMAIL.toLowerCase() && code===HOST_CODE))
+    return alert("Kennnummer nicht gefunden oder deaktiviert.");
+
+  const employeeId=person?.id || null;
+  const borrowerEmail=person?.email || (current.email.toLowerCase()===HOST_EMAIL.toLowerCase() ? HOST_EMAIL : EMPLOYEE_EMAIL);
+
+  const ins=await sb.from("loans").insert({
+    tool_id:t.id,
+    employee_id:employeeId,
+    employee_no:code,
+    borrower_email:borrowerEmail,
+    department:$("ldept").value,
+    checkout_note:note,
+    checked_out_by:current.id
+  });
+
+  if(ins.error)return alert(ins.error.message);
+  $("lnote").value="";
+  await loadAll();
+  alert("Ausgabe gespeichert.");
+}
+
+async function returnTool(){
+  const id=$("lid").value.trim();
+  const code=$("lempno").value.trim();
+  const note=$("lnote").value.trim();
+
+  if(!/^\d{4}$/.test(code)) return alert("Bitte die 4-stellige Kennnummer eingeben.");
+
+  const t=tools.find(x=>x.tool_number===id);
+  if(!t)return alert("Werkzeug nicht gefunden.");
+
+  const l=loans.find(x=>x.tool_id===t.id);
+  if(!l)return alert("Keine offene Ausgabe.");
+
+  const validEmployee = String(l.employee_no||"")===code;
+  const hostOverride = current.email.toLowerCase()===HOST_EMAIL.toLowerCase() && code===HOST_CODE;
+  if(!validEmployee && !hostOverride)
+    return alert("Die Kennnummer gehört nicht zu dieser Ausgabe.");
+
+  const {error}=await sb.from("loans").update({
+    returned_at:new Date().toISOString(),
+    returned_by:current.id,
+    return_note:note
+  }).eq("id",l.id);
+
+  if(error)alert(error.message);
+  else{
+    $("lnote").value="";
+    await loadAll();
+    alert("Rückgabe gespeichert.");
+  }
+}
+
+function renderLoans(){
+  $("loanRows").innerHTML=loans.map(l=>{
+    let t=tools.find(x=>x.id===l.tool_id)||{};
+    let e=employees.find(x=>x.id===l.employee_id);
+    return `<tr>
+      <td>${esc(t.tool_number)} – ${esc(t.name)}</td>
+      <td>${esc(e?.name||l.borrower_email)}<br><span class="muted">${esc(l.employee_no||"")}</span></td>
+      <td>${fmt(l.checked_out_at)}</td>
+      <td>${esc(l.department||"-")}</td>
+      <td>${esc(l.checkout_note||"")}</td>
+      <td><button class="ok" onclick="$('lid').value='${attr(t.tool_number)}';$('lempno').value='${attr(l.employee_no||"")}';returnTool()">Rückgabe</button></td>
+    </tr>`
+  }).join("")||'<tr><td colspan="6">Keine offenen Ausgaben.</td></tr>'
+}
+
+function renderEmployees(){
+  const box=$("employeeRows");
+  if(!box)return;
+  box.innerHTML=employees.map(e=>`<tr>
+    <td><b>${esc(e.employee_no)}</b></td>
+    <td>${esc(e.name)}</td>
+    <td>${esc(e.email)}</td>
+    <td>${e.active?"Aktiv":"Deaktiviert"}</td>
+    <td><button onclick="toggleEmployee('${attr(e.id)}',${!e.active})">${e.active?"Deaktivieren":"Aktivieren"}</button></td>
+  </tr>`).join("")||'<tr><td colspan="5">Noch keine Mitarbeiter angelegt.</td></tr>';
+}
+
+async function saveEmployee(){
+  if(current.email.toLowerCase()!==HOST_EMAIL.toLowerCase())return alert("Nur der Host darf Mitarbeiter hinzufügen.");
+  const name=$("ename").value.trim();
+  const code=$("eno").value.trim();
+  if(!name||!/^\d{4}$/.test(code))return alert("Name und eine genau 4-stellige Kennnummer sind erforderlich.");
+
+  const {data:existing}=await sb.from("employees").select("id").eq("employee_no",code).maybeSingle();
+  if(existing) return alert("Diese Kennnummer ist bereits vergeben.");
+
+  const {error}=await sb.from("employees").insert({
+    name:name,
+    email:EMPLOYEE_EMAIL,
+    employee_no:code,
+    role:"employee",
+    active:true
+  });
+  if(error){
+    console.error(error);
+    return alert("Mitarbeiter konnte nicht gespeichert werden: "+error.message);
+  }
+
+  $("ename").value="";
+  $("eno").value="";
+  await loadAll();
+  alert("Mitarbeiter wurde angelegt.");
+}
+
+async function toggleEmployee(id,active){
+  if(current.email.toLowerCase()!==HOST_EMAIL.toLowerCase())return alert("Nur der Host darf Mitarbeiter verwalten.");
+  const {error}=await sb.from("employees").update({active}).eq("id",id);
+  if(error)alert(error.message);
+  else await loadAll();
+}
+
+
+async function loadHistory(){
+  if(!current || current.email.toLowerCase()!==HOST_EMAIL.toLowerCase()) return;
+  const from=new Date();
+  from.setMonth(from.getMonth()-3);
+
+  const {data,error}=await sb.from("loans")
+    .select("*")
+    .gte("checked_out_at",from.toISOString())
+    .order("checked_out_at",{ascending:false});
+
+  if(error){
+    $("historyInfo").textContent="Fehler beim Laden: "+error.message;
+    $("historyRows").innerHTML="";
+    historyLoans=[];
+    return;
+  }
+
+  historyLoans=data||[];
+  renderHistory();
+}
+
+function renderHistory(){
+  const rows=historyLoans.map(l=>{
+    const t=tools.find(x=>x.id===l.tool_id)||{};
+    const e=employees.find(x=>x.id===l.employee_id);
+    return `<tr>
+      <td>${esc(t.tool_number||"-")} – ${esc(t.name||"-")}</td>
+      <td>${esc(e?.name||l.borrower_email||"-")}</td>
+      <td>${esc(l.employee_no||"-")}</td>
+      <td>${fmt(l.checked_out_at)}</td>
+      <td>${l.returned_at?fmt(l.returned_at):'<b>Offen</b>'}</td>
+      <td>${esc(l.checkout_note||"")}</td>
+      <td>${esc(l.return_note||"")}</td>
+    </tr>`;
+  }).join("");
+
+  $("historyRows").innerHTML=rows||'<tr><td colspan="7">Keine Ausgaben in den letzten 3 Monaten.</td></tr>';
+  $("historyInfo").textContent=`Zeitraum: ${fmt(new Date(Date.now()-90*24*60*60*1000).toISOString())} bis heute · ${historyLoans.length} Vorgänge`;
+}
+
+async function downloadHistoryPDF(){
+  if(!current || current.email.toLowerCase()!==HOST_EMAIL.toLowerCase()) return alert("Nur der Host kann den Verlauf als PDF herunterladen.");
+  await loadHistory();
+
+  if(typeof window.jspdf==="undefined"){
+    return alert("Die PDF-Bibliothek konnte nicht geladen werden. Bitte Internetverbindung prüfen und erneut versuchen.");
+  }
+
+  const {jsPDF}=window.jspdf;
+  const doc=new jsPDF({orientation:"landscape",unit:"mm",format:"a4"});
+  const margin=10;
+  let y=14;
+
+  doc.setFontSize(16);
+  doc.text("Werkzeugverwaltung – Ausgabeverlauf",margin,y);
+  y+=8;
+  doc.setFontSize(9);
+  doc.text("Letzte 3 Monate · Erstellt am "+new Date().toLocaleString("de-DE"),margin,y);
+  y+=8;
+
+  const cols=[
+    ["Werkzeug",55],
+    ["Mitarbeiter",45],
+    ["Kenn-Nr.",22],
+    ["Ausgabe",32],
+    ["Rückgabe",32],
+    ["Bemerkung Ausgabe",48],
+    ["Bemerkung Rückgabe",48]
+  ];
+
+  const xPositions=[];
+  let x=margin;
+  cols.forEach(c=>{xPositions.push(x);x+=c[1];});
+
+  doc.setFontSize(8);
+  doc.setFont(undefined,"bold");
+  cols.forEach((c,i)=>doc.text(c[0],xPositions[i],y));
+  y+=5;
+  doc.setFont(undefined,"normal");
+
+  const wrap=(text,width)=>doc.splitTextToSize(String(text||"-"),width-2);
+  const rows=historyLoans.map(l=>{
+    const t=tools.find(x=>x.id===l.tool_id)||{};
+    const e=employees.find(x=>x.id===l.employee_id);
+    return [
+      (t.tool_number||"-")+" – "+(t.name||"-"),
+      e?.name||l.borrower_email||"-",
+      l.employee_no||"-",
+      fmt(l.checked_out_at),
+      l.returned_at?fmt(l.returned_at):"Offen",
+      l.checkout_note||"-",
+      l.return_note||"-"
+    ];
+  });
+
+  rows.forEach(row=>{
+    const wrapped=row.map((v,i)=>wrap(v,cols[i][1]));
+    const height=Math.max(...wrapped.map(a=>a.length))*3.8+2;
+    if(y+height>195){
+      doc.addPage();
+      y=14;
+      doc.setFont(undefined,"bold");
+      cols.forEach((c,i)=>doc.text(c[0],xPositions[i],y));
+      y+=5;
+      doc.setFont(undefined,"normal");
+    }
+    wrapped.forEach((lines,i)=>{
+      doc.text(lines,xPositions[i],y);
+    });
+    y+=height;
+  });
+
+  doc.save("werkzeugverwaltung_verlauf_3_monate.pdf");
+}
+
+function renderDashboard(){$("nTotal").textContent=tools.length;$("nOut").textContent=loans.length;$("nMaint").textContent=tools.filter(t=>t.status==="maintenance").length;$("nFree").textContent=tools.filter(t=>status(t)==="available").length;$("dashLoans").innerHTML=loans.map(l=>{let t=tools.find(x=>x.id===l.tool_id)||{};return `<p><b>${esc(t.tool_number)} – ${esc(t.name)}</b> · ${esc(l.borrower_email)} · ${fmt(l.checked_out_at)}</p>`}).join("")||'<p class="muted">Keine offenen Ausgaben.</p>'}
+function renderQR(){if(!$("qrgrid"))return;$("qrgrid").innerHTML="";tools.forEach(t=>{let box=document.createElement("div");box.className="card";box.style.textAlign="center";box.innerHTML=`<b>${esc(t.tool_number)}</b><br>${esc(t.name)}<div id="qr-${t.id}" style="margin:10px auto;width:180px"></div><button onclick="printOne('${attr(t.tool_number)}')">Drucken</button>`;$("qrgrid").appendChild(box);new QRCode(document.getElementById("qr-"+t.id),{text:appUrl(t.tool_number),width:180,height:180})})}
+function printOne(id){let t=tools.find(x=>x.tool_number===id);if(!t)return;let url=appUrl(t.tool_number);let w=window.open("","_blank");w.document.write(`<html><head><title>QR ${esc(t.tool_number)}</title><style>body{text-align:center;font-family:Arial;margin:30px}.qr{margin:20px auto}</style><script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head><body><h2>${esc(t.tool_number)}</h2><h3>${esc(t.name)}</h3><div class="qr" id="q"></div><p>Werkzeugverwaltung</p><script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"><\/script><script>new QRCode(document.getElementById('q'),{text:${JSON.stringify(url)},width:280,height:280});setTimeout(()=>print(),500)<\/script></body></html>`);w.document.close()}
+function printAll(){let w=window.open("","_blank");w.document.write(`<html><head><title>Werkzeug QR-Codes</title><style>body{font-family:Arial}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.card{text-align:center;border:1px solid #ddd;padding:12px;break-inside:avoid}.qr{margin:8px auto;width:180px}</style><script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head><body><div class="grid">${tools.map((t,i)=>`<div class="card"><b>${esc(t.tool_number)}</b><br>${esc(t.name)}<div class="qr" id="q${i}"></div></div>`).join("")}</div><script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"><\/script><script>${tools.map((t,i)=>`new QRCode(document.getElementById('q${i}'),{text:${JSON.stringify(appUrl(t.tool_number))},width:180,height:180});`).join("")}setTimeout(()=>print(),800)<\/script></body></html>`);w.document.close()}
+function openToolFromQR(id){let t=tools.find(x=>x.tool_number===id);if(t){tab("loan");$("lid").value=t.tool_number;alert("Werkzeug "+t.tool_number+" wurde automatisch geöffnet.")}}
+function fmt(x){return x?new Date(x).toLocaleString("de-DE"):"-"}function esc(x){return String(x??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}function attr(x){return String(x??"").replace(/'/g,"\\'")}
+init();
+</script>
+<script>if("serviceWorker"in navigator)navigator.serviceWorker.register("sw.js").catch(()=>{});</script>
+</body></html>
