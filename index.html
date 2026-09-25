@@ -20,7 +20,10 @@
 </section></main>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script><script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script><script>const EMPLOYEE_EMAIL="mitarbeiter@marcoreiss.com"; const HOST_EMAIL="bauerhin.b@gmail.com"; const HOST_CODE="0606";</script>
 <script>
-const CONFIG={SUPABASE_URL:"https://nxcbpdhbpjqbshmdgndb.supabase.co",SUPABASE_ANON_KEY:"sb_publishable_zD-mzPs2yyajZQBvmj0QBQ_YVA83fco"};let sb,current=null,me=null,tools=[],loans=[],employees=[],history=[];const $=id=>document.getElementById(id);const role=()=>me?.role||'employee';const isHost=()=>role()==='host';
+const CONFIG={
+  SUPABASE_URL:"https://nxcbpdhbpjqbshmdgndb.supabase.co",
+  SUPABASE_ANON_KEY:"sb_publishable_zD-mzPs2yyajZQBvmj0QBQ_YVA83fco"
+};
 async function init(){sb=supabase.createClient(CONFIG.SUPABASE_URL,CONFIG.SUPABASE_ANON_KEY);const {data}=await sb.auth.getSession();if(data.session){current=data.session.user;await openApp()}const q=new URLSearchParams(location.search).get('tool');if(q&&data.session)setTimeout(()=>openToolFromQR(q),300)}
 async function login(){const {data,error}=await sb.auth.signInWithPassword({email:$('email').value,password:$('password').value});if(error){$('loginMsg').textContent=error.message;return}current=data.user;await openApp()}
 async function logout(){await sb.auth.signOut();location.href=location.pathname}
